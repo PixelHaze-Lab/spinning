@@ -2,8 +2,17 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>ルーレットデモ（当たりハズレ付き）</title>
+  <title>ルーレットデモ</title>
   <style>
+    /* CSS変数でルーレットのパラメータを管理 */
+    :root {
+      --segment-count: 6;
+      --segment-angle: calc(360deg / var(--segment-count));
+      --wheel-size: 260px;
+      /* 【調整】文字を配置する中心からの距離を半径の60%に縮小 */
+      --text-radius: calc(var(--wheel-size) / 2 * 0.6); 
+    }
+
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       min-height: 100vh;
@@ -18,8 +27,8 @@
 
     .roulette-wrapper {
       position: relative;
-      width: 260px;
-      height: 260px;
+      width: var(--wheel-size);
+      height: var(--wheel-size);
     }
 
     .wheel {
@@ -43,6 +52,45 @@
       transform: rotate(0deg);
     }
 
+    /* --- セグメント内の文字の配置 --- */
+    .segment-text-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .segment-text {
+      position: absolute;
+      color: white; 
+      text-shadow: 0 0 2px #000;
+      font-weight: 800;
+      font-size: 24px;
+      width: 20px;
+      height: 20px;
+      line-height: 20px;
+      text-align: center;
+      
+      /* 文字をホイールの中央に配置 */
+      top: 50%;
+      left: 50%;
+      /* 文字の要素自体の中心を中央に合わせる */
+      transform: translate(-50%, -50%); 
+
+      /* 【調整】文字を正確に配置するための複雑なTransform */
+      transform: 
+        /* 1. 文字の中心をホイールの中心に配置 */
+        translate(-50%, -50%)
+        /* 2. セグメントの中心角度に要素を回転 (A=0度) */
+        rotate(calc(var(--i) * var(--segment-angle) - 90deg)) 
+        /* 3. 外側へ移動 (Y軸に沿って--text-radius分移動) */
+        translateY(calc(-1 * var(--text-radius))) 
+        /* 4. 文字の向きを打ち消す逆回転を適用 */
+        rotate(calc(var(--i) * var(--segment-angle) * -1 + 90deg));
+    }
+    
     .center-circle {
       width: 60px;
       height: 60px;
@@ -54,6 +102,7 @@
       align-items: center;
       font-weight: bold;
       font-size: 14px;
+      z-index: 10;
     }
 
     .pointer {
@@ -67,6 +116,7 @@
       border-right: 16px solid transparent;
       border-bottom: 24px solid #ef4444;
       filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3));
+      z-index: 20;
     }
 
     button {
@@ -92,37 +142,11 @@
       font-size: 18px;
       font-weight: 500;
       color: #111827;
-      min-height: 1.5em;
-      transition: color 0.2s ease, transform 0.2s ease;
     }
 
     .segments-info {
       font-size: 13px;
       color: #4b5563;
-    }
-
-    /* 当たり演出 */
-    #result.win {
-      color: #16a34a; /* 緑 */
-      animation: pop 0.5s ease;
-    }
-
-    /* ハズレ演出 */
-    #result.lose {
-      color: #dc2626; /* 赤 */
-      animation: shake 0.4s ease;
-    }
-
-    @keyframes pop {
-      0%   { transform: scale(0.8); }
-      50%  { transform: scale(1.2); }
-      100% { transform: scale(1); }
-    }
-
-    @keyframes shake {
-      0%, 100% { transform: translateX(0); }
-      25%      { transform: translateX(-4px); }
-      75%      { transform: translateX(4px); }
     }
   </style>
 </head>
@@ -130,6 +154,14 @@
   <div class="roulette-wrapper">
     <div class="pointer"></div>
     <div class="wheel" id="wheel">
+      <div class="segment-text-container">
+        <div class="segment-text" style="--i:0;">A</div>
+        <div class="segment-text" style="--i:1;">B</div>
+        <div class="segment-text" style="--i:2;">C</div>
+        <div class="segment-text" style="--i:3;">D</div>
+        <div class="segment-text" style="--i:4;">E</div>
+        <div class="segment-text" style="--i:5;">F</div>
+      </div>
       <div class="center-circle">ROULETTE</div>
     </div>
   </div>
@@ -137,31 +169,25 @@
   <button id="spinButton">スタート</button>
   <div id="result">ボタンを押してルーレット開始！</div>
   <div class="segments-info">
-    セグメント: A / B / C / D / E / F<br>
-    （サンプルでは A・C が「当たり」）
+    セグメント: A / B / C / D / E / F
   </div>
 
   <script>
-    // ルーレットの項目
     const items = ["A", "B", "C", "D", "E", "F"];
-
-    // 「当たり」にしたい項目
-    const winners = ["A", "C"];  // ←ここを書き換えればOK
 
     const wheel = document.getElementById("wheel");
     const spinButton = document.getElementById("spinButton");
     const result = document.getElementById("result");
 
     let isSpinning = false;
-    let baseRotation = 0;         // 現在の角度
-    let spinAnimationId = null;   // requestAnimationFrame のID
+    let baseRotation = 0;      
+    let spinAnimationId = null; 
 
     const segmentCount = items.length;
     const segmentAngle = 360 / segmentCount;
 
-    // ぐるぐる回ってる間のアニメーション
     function continuousSpin() {
-      baseRotation = (baseRotation + 10) % 360; // 1フレームごとに10度回す
+      baseRotation = (baseRotation + 10) % 360; 
       wheel.style.transform = `rotate(${baseRotation}deg)`;
       spinAnimationId = requestAnimationFrame(continuousSpin);
     }
@@ -171,33 +197,27 @@
     }
 
     spinButton.addEventListener("click", () => {
-      // まず毎回クラスをリセット
-      result.classList.remove("win", "lose");
-
       if (!isSpinning) {
-        // ▼ スタート（1回目）
         isSpinning = true;
         spinButton.textContent = "ストップ";
         result.textContent = "ぐるぐる回転中…";
         continuousSpin();
       } else {
-        // ▼ ストップ（2回目）→ 結果決定
         isSpinning = false;
         spinButton.textContent = "もう一度";
         cancelAnimationFrame(spinAnimationId);
 
-        // ランダムでどのセグメントにするか決定
         const randomIndex = Math.floor(Math.random() * segmentCount);
 
-        // 何周かしてからそのセグメントで止まるように角度を計算
-        const extraSpins = 5; // 何周させるか（見た目用）
+        const extraSpins = 5;
+        // ポインターがセグメントの中心を指すように調整
         const targetAngleFromTop = randomIndex * segmentAngle + segmentAngle / 2;
-        const targetRotation =
-          extraSpins * 360 + targetAngleFromTop;
+        
+        const targetRotation = extraSpins * 360 + targetAngleFromTop;
 
         const startRotation = baseRotation;
         const diff = targetRotation - startRotation;
-        const duration = 1200; // ミリ秒（止まるときのアニメーション時間）
+        const duration = 1200;
 
         const startTime = performance.now();
 
@@ -212,24 +232,13 @@
           if (t < 1) {
             requestAnimationFrame(animateToResult);
           } else {
-            // 最終角度を保存
             baseRotation = currentAngle % 360;
 
-            // 上（ポインタ位置）から見てどのセグメントにいるか計算
-            const normalized =
-              (360 - baseRotation + 360) % 360; // 0度が上になるように補正
+            const normalized = (360 - baseRotation + 360) % 360; 
             const index = Math.floor(normalized / segmentAngle) % segmentCount;
 
             const hit = items[index];
-            const isWin = winners.includes(hit);
-
-            if (isWin) {
-              result.textContent = `🎉 当たり！「${hit}」が出ました！`;
-              result.classList.add("win");
-            } else {
-              result.textContent = `残念…「${hit}」でした。もう一回チャレンジ？`;
-              result.classList.add("lose");
-            }
+            result.textContent = `🎉 結果：${hit} が当たりました！`;
           }
         }
 
