@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ルーレットデモ（当たりハズレ付き）</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      margin: 0;
+      background: #f3f4f6;
+    }
+
+    .roulette-wrapper {
+      position: relative;
+      width: 260px;
+      height: 260px;
+    }
+
+    .wheel {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 6px solid #111827;
+      box-sizing: border-box;
+      background: conic-gradient(
+        #f97373 0deg 60deg,
+        #fb923c 60deg 120deg,
+        #facc15 120deg 180deg,
+        #34d399 180deg 240deg,
+        #60a5fa 240deg 300deg,
+        #a78bfa 300deg 360deg
+      );
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+      transform: rotate(0deg);
+    }
+
+    .center-circle {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: #111827;
+      color: #f9fafb;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .pointer {
+      position: absolute;
+      top: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 16px solid transparent;
+      border-right: 16px solid transparent;
+      border-bottom: 24px solid #ef4444;
+      filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3));
+    }
+
+    button {
+      padding: 10px 26px;
+      border-radius: 999px;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(to right, #6366f1, #ec4899);
+      color: #f9fafb;
+      box-shadow: 0 8px 16px rgba(79, 70, 229, 0.4);
+      transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+    }
+
+    button:active {
+      transform: translateY(1px) scale(0.99);
+      box-shadow: 0 4px 8px rgba(79, 70, 229, 0.5);
+      filter: brightness(0.96);
+    }
+
+    #result {
+      font-size: 18px;
+      font-weight: 500;
+      color: #111827;
+      min-height: 1.5em;
+      transition: color 0.2s ease, transform 0.2s ease;
+    }
+
+    .segments-info {
+      font-size: 13px;
+      color: #4b5563;
+    }
+
+    /* 当たり演出 */
+    #result.win {
+      color: #16a34a; /* 緑 */
+      animation: pop 0.5s ease;
+    }
+
+    /* ハズレ演出 */
+    #result.lose {
+      color: #dc2626; /* 赤 */
+      animation: shake 0.4s ease;
+    }
+
+    @keyframes pop {
+      0%   { transform: scale(0.8); }
+      50%  { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25%      { transform: translateX(-4px); }
+      75%      { transform: translateX(4px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="roulette-wrapper">
+    <div class="pointer"></div>
+    <div class="wheel" id="wheel">
+      <div class="center-circle">ROULETTE</div>
+    </div>
+  </div>
+
+  <button id="spinButton">スタート</button>
+  <div id="result">ボタンを押してルーレット開始！</div>
+  <div class="segments-info">
+    セグメント: A / B / C / D / E / F<br>
+    （サンプルでは A・C が「当たり」）
+  </div>
+
+  <script>
+    // ルーレットの項目
+    const items = ["A", "B", "C", "D", "E", "F"];
+
+    // 「当たり」にしたい項目
+    const winners = ["A", "C"];  // ←ここを書き換えればOK
+
+    const wheel = document.getElementById("wheel");
+    const spinButton = document.getElementById("spinButton");
+    const result = document.getElementById("result");
+
+    let isSpinning = false;
+    let baseRotation = 0;         // 現在の角度
+    let spinAnimationId = null;   // requestAnimationFrame のID
+
+    const segmentCount = items.length;
+    const segmentAngle = 360 / segmentCount;
+
+    // ぐるぐる回ってる間のアニメーション
+    function continuousSpin() {
+      baseRotation = (baseRotation + 10) % 360; // 1フレームごとに10度回す
+      wheel.style.transform = `rotate(${baseRotation}deg)`;
+      spinAnimationId = requestAnimationFrame(continuousSpin);
+    }
+
+    function easeOutQuad(t) {
+      return t * (2 - t);
+    }
+
+    spinButton.addEventListener("click", () => {
+      // まず毎回クラスをリセット
+      result.classList.remove("win", "lose");
+
+      if (!isSpinning) {
+        // ▼ スタート（1回目）
+        isSpinning = true;
+        spinButton.textContent = "ストップ";
+        result.textContent = "ぐるぐる回転中…";
+        continuousSpin();
+      } else {
+        // ▼ ストップ（2回目）→ 結果決定
+        isSpinning = false;
+        spinButton.textContent = "もう一度";
+        cancelAnimationFrame(spinAnimationId);
+
+        // ランダムでどのセグメントにするか決定
+        const randomIndex = Math.floor(Math.random() * segmentCount);
+
+        // 何周かしてからそのセグメントで止まるように角度を計算
+        const extraSpins = 5; // 何周させるか（見た目用）
+        const targetAngleFromTop = randomIndex * segmentAngle + segmentAngle / 2;
+        const targetRotation =
+          extraSpins * 360 + targetAngleFromTop;
+
+        const startRotation = baseRotation;
+        const diff = targetRotation - startRotation;
+        const duration = 1200; // ミリ秒（止まるときのアニメーション時間）
+
+        const startTime = performance.now();
+
+        function animateToResult(now) {
+          const elapsed = now - startTime;
+          const t = Math.min(elapsed / duration, 1);
+          const eased = easeOutQuad(t);
+          const currentAngle = startRotation + diff * eased;
+
+          wheel.style.transform = `rotate(${currentAngle}deg)`;
+
+          if (t < 1) {
+            requestAnimationFrame(animateToResult);
+          } else {
+            // 最終角度を保存
+            baseRotation = currentAngle % 360;
+
+            // 上（ポインタ位置）から見てどのセグメントにいるか計算
+            const normalized =
+              (360 - baseRotation + 360) % 360; // 0度が上になるように補正
+            const index = Math.floor(normalized / segmentAngle) % segmentCount;
+
+            const hit = items[index];
+            const isWin = winners.includes(hit);
+
+            if (isWin) {
+              result.textContent = `🎉 当たり！「${hit}」が出ました！`;
+              result.classList.add("win");
+            } else {
+              result.textContent = `残念…「${hit}」でした。もう一回チャレンジ？`;
+              result.classList.add("lose");
+            }
+          }
+        }
+
+        requestAnimationFrame(animateToResult);
+      }
+    });
+  </script>
+</body>
+</html>
